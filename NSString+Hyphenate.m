@@ -11,13 +11,14 @@
 
 @interface NSString ()
 
-@property (strong, nonatomic, readonly) NSBundle* bundle;
-
 @end
 
 @implementation NSString (Hyphenate)
 
-- (NSBundle*)bundle
+static NSString* currentLocaleIdentifier = nil;
+static HyphenDict* dict = NULL;
+
+- (NSString*)dictionaryPathForLocale:(NSLocale*)locale
 {
 	static NSBundle* bundle = nil;
 	if ( !bundle )
@@ -25,16 +26,9 @@
 		NSString* bundlePath = [[[NSBundle mainBundle] resourcePath] stringByAppendingPathComponent:@"Hyphenate.bundle"];
 		bundle = [NSBundle bundleWithPath:bundlePath];
 	}
-	return bundle;
-}
 
-static NSString* currentLocaleIdentifier = nil;
-static HyphenDict* dict = NULL;
-
-- (NSString*)dictionaryPathForLocale:(NSLocale*)locale
-{
 	NSString* localeIdentifier = [locale localeIdentifier];
-	return [self.bundle pathForResource:[NSString stringWithFormat:@"hyph_%@",localeIdentifier] ofType:@"dic"];
+	return [bundle pathForResource:[NSString stringWithFormat:@"hyph_%@",localeIdentifier] ofType:@"dic"];
 }
 
 - (void)setHyphenDictionaryForLocale:(NSLocale*)locale
