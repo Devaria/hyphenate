@@ -9,63 +9,71 @@
 
 #include "hyphen.h"
 
+@interface NSString ()
+
+@property (strong, nonatomic, readonly) NSBundle* bundle;
+
+@end
+
 @implementation NSString (Hyphenate)
 
-- (NSString*)stringByHyphenatingWithLocale:(NSLocale*)locale {
-    static HyphenDict* dict = NULL;
-    static NSString* localeIdentifier = nil;
-    static NSBundle* bundle = nil;
-    
-    ////////////////////////////////////////////////////////////////////////////
-    // Setup.
-    //
-    // Establish that we got all the information we need: the bundle with 
-    // dictionaries, the locale and the loaded dictionary.  Cache dictionary and
-    // save the language code used to retrieve it.
-    //
-    
-    // Try to guess the locale from the string, if not given.
-    CFStringRef language;
-    if (locale == nil 
-        && (language = CFStringTokenizerCopyBestStringLanguage(
-            (CFStringRef)self, CFRangeMake(0, [self length]))))
-    {
-        locale = [[[NSLocale alloc] 
-                  initWithLocaleIdentifier:(NSString*)language] autorelease];
-        CFRelease(language);                
-    }
-    
-    if (locale == nil) {
-        return self;
-    } // else
-    
-    if (![localeIdentifier isEqualToString:[locale localeIdentifier]] 
-        && dict != NULL) 
-    {
-        hnj_hyphen_free(dict);
-        dict = NULL;
-    }
-    
-    localeIdentifier = [locale localeIdentifier];
-    
-    if (bundle == nil) {
-        NSString* bundlePath = [[[NSBundle mainBundle] resourcePath] 
-                                stringByAppendingPathComponent:
-                                @"Hyphenate.bundle"];
-        bundle = [NSBundle bundleWithPath:bundlePath];
-    }
-    
-    if (dict == NULL) {
-        dict = hnj_hyphen_load([[bundle pathForResource:
-                                 [NSString stringWithFormat:@"hyph_%@", 
-                                   localeIdentifier]
-                                                 ofType:@"dic"]
-                                UTF8String]);
-    }
-    
-    if (dict == NULL) {
-        return self;
-    } // else
+- (NSBundle*)bundle
+{
+	static NSBundle* bundle = nil;
+	if ( !bundle )
+	{
+		NSString* bundlePath = [[[NSBundle mainBundle] resourcePath] stringByAppendingPathComponent:@"Hyphenate.bundle"];
+		bundle = [NSBundle bundleWithPath:bundlePath];
+	}
+	return bundle;
+}
+
+static NSString* currentLocaleIdentifier = nil;
+static HyphenDict* dict = NULL;
+
+- (NSString*)dictionaryPathForLocale:(NSLocale*)locale
+{
+	NSString* localeIdentifier = [locale localeIdentifier];
+	return [self.bundle pathForResource:[NSString stringWithFormat:@"hyph_%@",localeIdentifier] ofType:@"dic"];
+}
+
+- (void)setHyphenDictionaryForLocale:(NSLocale*)locale
+{
+	if (dict && [currentLocaleIdentifier isEqualToString:locale.localeIdentifier])
+		return; // If got the dict already.
+
+	if (dict != NULL)
+		hnj_hyphen_free(dict);
+	NSString* path = [self dictionaryPathForLocale:locale];
+	dict = hnj_hyphen_load(path.UTF8String);
+	currentLocaleIdentifier = locale.localeIdentifier;
+}
+
+- (NSString*)stringByHyphenating
+{
+	return [self stringByHyphenatingWithLocale: nil];
+}
+
+- (NSString*)stringByHyphenatingWithLocale:(NSLocale*)locale
+{
+	CFStringRef language = CFStringTokenizerCopyBestStringLanguage((CFStringRef)self, CFRangeMake(0, [self length]));
+	NSLocale* languageLocale;
+
+	if (language)
+	{
+		languageLocale = [[NSLocale alloc] initWithLocaleIdentifier:(__bridge NSString*)language];
+		CFRelease(language);
+	}
+
+	if (locale)
+		[self setHyphenDictionaryForLocale:locale];
+	else if ( languageLocale && [self dictionaryPathForLocale:languageLocale] )
+		[self setHyphenDictionaryForLocale:languageLocale];
+	else
+		[self setHyphenDictionaryForLocale:[NSLocale currentLocale]];
+
+	if (dict == NULL)
+		return self;
 
     ////////////////////////////////////////////////////////////////////////////
     // The works.
@@ -109,7 +117,7 @@
             [result appendString:token];
         } else {
             char const* tokenChars = [[token lowercaseString] UTF8String];
-            wordLength = strlen(tokenChars);
+            wordLength = token.length;
             // This is the buffer size the algorithm needs.
             hyphens = (char*)malloc(wordLength + 5); // +5, see hypen.h 
             rep = NULL; // Will be allocated by the algorithm

@@ -23,6 +23,9 @@
 //
 // The loaded dictionary will be cached, so for the best performance group your
 // hyphenation tasks per locale.
+
+- (NSString*)stringByHyphenating;
+
 - (NSString*)stringByHyphenatingWithLocale:(NSLocale*)locale;
 
 @end
